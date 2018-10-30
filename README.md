@@ -22,13 +22,13 @@ THAM Antenna Switch Controller is an ESP IoT Chip based device to control relays
    In many routines there is a parameter call loopFlag,  due to
    the async nature of the program we do the heavy lifting of any
    function in the main loop(). This lets the handlers
-   format a HTTML return string to the device as fast as possible.
+   format a HTML return string to the device as fast as possible.
    In order to use a routine, the routine must first be called
    with a false loopFlag, this allows the handlers to be nonblocking
-   Then the routine must be called again with a true loopFlag.
-   The routine will then do the function.
+   Then the routine must be called again with a true loopFlag where
+   blocking is permitted (main loop).
    
-   Do be careful with the pre processor definition "#".  I use them
+   Do be careful with the pre processor directives "#".  I use them
    extensively and sometimes to a fault.
 
    As I have several old style UCN5812 serial latches on hand, 
@@ -39,20 +39,19 @@ THAM Antenna Switch Controller is an ESP IoT Chip based device to control relays
 
    As this is designed to be mounted far away from a computer,
    this design is to be able to detect that a firmware update is 
-   available for the device and automatically download the new
-   firmware.  
+   available for the device and download the new firmware.
 
-   The design does not update automatically, the user must 
-   requests the firmware update check via the main web page.
+   The design does not update firmware automatically, the user 
+   must requests the firmware update check via the main web page.
 
-   As these devices control antenna relays that may have significant power
-   running through them, the device must only do the firmware update when 
-   directed by the user through the main web page request.
-
+   As these devices control antenna relays that may have significant
+   power running through them, the device must take care not to
+   interrupt the relays unless commanded by an oeprator
+   
    2X6 switch notes
    
-   NOTE:  Only 1 antenna port can be active.  if more the device has more 
-          than one radio input, then device must prevent any other request
+   NOTE:  Only 1 antenna port can be active.  If the device has more than
+          one radio input, then the device must prevent any other request
           for that antenna port.
 
    NOTE:  8266 can only handle 9 safe GPIO pins, 2 more if Serial line 
@@ -68,7 +67,7 @@ THAM Antenna Switch Controller is an ESP IoT Chip based device to control relays
    7) Operate at a long distance from the station.
 
    Sub Functions
-   1) ability connect to WiFi network as a client.
+   1) Ability connect to WiFi network as a client.
    2) ability to function as an AP (access point) without internet
-   3) display through Web pages on PC or Smart device
+   3) Display through Web pages on PC or Smart device
    4) Ability to rename Antenna ports
