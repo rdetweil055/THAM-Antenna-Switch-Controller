@@ -1,7 +1,7 @@
 # THAM-Antenna-Switch-Controller
 THAM Antenna Switch Controller is an ESP IoT Chip based device to control relays of an antenna switch device
 
-   Clearn up tasks
+   Clean up tasks
    
    1) merge config structure into IAS field
          Does not look possible yet,
@@ -13,17 +13,17 @@ THAM Antenna Switch Controller is an ESP IoT Chip based device to control relays
    This firmware is designed for a 2X6 antenna switch, however
    with some modification it could server any number of inputs
    and outputs.  The hardware selection is 8266.  If the device
-   is to be mounted on a tower some distance from the radion 
-   station an ability to do a OTA update is needed.  Also an 
+   is to be mounted on a tower some distance from the radio 
+   station an ability to do an OTA update is needed.  Also, an 
    external antenna is needed.  I used the WROOM-02U as the 
-   8266 device that has a IPEX anenna connector and a 6db gain
+   8266 device that has an IPEX antenna connector and a 6db gain
    panel mount 2.4 ghz antenna in a weather proof enclosure.
 
    In many routines there is a parameter call loopFlag,  due to
    the async nature of the program we do the heavy lifting of any
    function in the main loop(). This lets the handlers
    format a HTTML return string to the device as fast as possible.
-   In order to use a routine the routine must first be called
+   In order to use a routine, the routine must first be called
    with a false loopFlag, this allows the handlers to be nonblocking
    Then the routine must be called again with a true loopFlag.
    The routine will then do the function.
@@ -39,10 +39,10 @@ THAM Antenna Switch Controller is an ESP IoT Chip based device to control relays
 
    As this is designed to be mounted far away from a computer,
    this design is to be able to detect that a firmware update is 
-   available for the device and automaticly download the new
+   available for the device and automatically download the new
    firmware.  
 
-   The design does not update automatically,  the user must 
+   The design does not update automatically, the user must 
    requests the firmware update check via the main web page.
 
    As these devices control antenna relays that may have significant power
@@ -72,5 +72,3 @@ THAM Antenna Switch Controller is an ESP IoT Chip based device to control relays
    2) ability to function as an AP (access point) without internet
    3) display through Web pages on PC or Smart device
    4) Ability to rename Antenna ports
-
-   
