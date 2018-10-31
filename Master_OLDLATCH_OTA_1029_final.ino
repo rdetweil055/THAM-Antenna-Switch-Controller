@@ -71,7 +71,7 @@
 // 4) Ability to rename Antenna ports
 //
 // 
-#define DEBUGLEVEL 2                    // Debug print level.
+#define DEBUGLEVEL 1                    // Debug print level.
 #include "DebugUtils.h"                 // set DEBUG Serial.print definitions
                                         // local file...
 #define USE_APPSTORY
@@ -163,6 +163,10 @@ bool doRelayCommandRequest    = false;  // request antenna relay shift out.
 bool doThamAPRequest          = false;  // request flag for THAM AP mode
 bool doThamSTARequest         = false;  // request flag for THAM STA mode
 bool wifidnsStarted           = false;  // true if DNS is running
+
+#ifndef USE_APPSTORY
+bool handleWifiWaitFlag       = false;  // Wifi Manager function.
+#endif
 
 #ifdef USE_APPSTORY
 char* ThamConfigWord = "00000000";         // A config word stored in EEPROM ( Not Used )
@@ -259,7 +263,7 @@ AsyncWebServer webServer(80);           // WebService structure
 
 // ============================================= HTML text =============================================
 // For THAM device
-const char THAM_DEVICE_FUNCTION[] PROGMEM  = "THAM 2X6 Antenna Relay Controller";
+#define THAM_DEVICE_FUNCTION "THAM 2X6 Antenna Relay Controller"
 
 // General form for unified look and feel.
 const char HTTP_APP_HEAD[] PROGMEM         = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>{mr}<meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'/><title>{v}</title>";
@@ -271,25 +275,27 @@ const char HTTP_APP_HEAD_END[] PROGMEM     = "</head><body>{h}<div style='text-a
 
 // ROOT FORM HTTP
 const char HTTP_ROOTTEXT[] PROGMEM         = "<h2>Welcome To THam!</h2>"
-                                              "<p>This is the {dn} device.</p>"
-                                              "<p>You are connected through the network: {n}</p>";
-                                              
-const char HTTP_ROOT_FORM[] PROGMEM        = "<p>To connect or change a WIFI network Press \"Connect/Change Network\".</p>"
-                                             "<form action='showbuttons' method='POST'>"
-                                             "<button type='submit'>Antenna Switch Display</button>"
-                                             "<br><br><button type='submit' formaction='antennasetup'>Configure Antenna Names</button>"
-                                             "<br><br><button type='submit' formaction='wifisetup'>Connect/Change Network</button>"
-                                             "<br><br><button type='submit' formaction='thamnetwork'>Use THAM Network</button>"
-#ifdef USE_APPSTORY
-                                             "<br><br><button type='submit' formaction='checkupdate'>Check for Updates</button>"
-#endif
-                                             ;
-
+                                             "<p>This is the " THAM_DEVICE_FUNCTION ".</p>"
+                                             "<p>You are connected to SSID: {n}.</p>"
+                                             "<p>The Web portal is {ip}.</P>";
 const char HTTP_THAMNET[] PROGMEM          = "<p>My THam Network can be used.</p>"
-                                             "<p>It is limited to 4 connected devices.</p>"
-                                             "<p>It is recommended to connect to an isolated station network router.</p>";
+                                             "<p>It is limited to 4 connections.</p>";
+                                                                                           
+const char HTTP_ROOT_WIFI_TXT[] PROGMEM    = "<p>To change a WIFI network, click \"Use THAM Network\" first.</p>";
+const char HTTP_ROOT_THAM_TXT[] PROGMEM    = "<p>It is recommended to connect to an isolated station network router.</p>"
+                                             "<p>To connect a WIFI network click \"Connect Network\".</p>";
 
-const char HTTP_ONPORTAL[] PROGMEM         = "<p>The Web portal is {ip}</P>";
+const char HTTP_ROOT_FORM[] PROGMEM        = "<form action='showbuttons' method='POST'>"
+                                             "<button type='submit'>Antenna Switch Display</button>"
+                                             "<br><br><button type='submit' formaction='antennasetup'>Configure Antenna Names</button>";
+#ifdef USE_APPSTORY
+const char HTTP_ROOT_FWBUTTON[] PROGMEM    = "<br><br><button type='submit' formaction='checkupdate'>Check for Updates</button>";
+#endif
+                                             
+// can have wifi button or tham button, not both.
+const char HTTP_ROOT_WIFIBUTTON[] PROGMEM  = "<br><br><button type='submit' formaction='wifisetup'>Connect Network</button>";
+const char HTTP_ROOT_THAMBUTTON[] PROGMEM  = "<br><br><button type='submit' formaction='thamnetwork'>Use THAM Network</button>";
+
 //const char HTTP_NEWPORTAL[] PROGMEM        = "<p>Please reconnect on the web portal</P>";
 
 #ifndef USE_APPSTORY
@@ -602,7 +608,7 @@ bool antennaSetPort(int radioNum, int portNum) {  // Set the port
 
 // some debug functions
 // ========================================= Some Debugging code ===========================================
-#if DEBUGLEVEL >= 1
+#if DEBUGLEVEL >= 3
 void showWifiStatus() {
   int r_stt;
   
@@ -623,7 +629,7 @@ void showWifiStatus() {
 #endif
 
 // ==========================================================================================
-#if DEBUGLEVEL >= 1
+#if DEBUGLEVEL >= 3
 void showWifiMode() {
   int r_stt;
   
@@ -668,6 +674,7 @@ void beginThamAP(){
                                  // only do this if THAM network specificly requested
                                      
     IAS.preSetDeviceName(strDeviceName);
+    IAS.writeConfig(false);      // save it.
 
 #endif
 
@@ -771,26 +778,19 @@ void doConfigMode(bool loopFlag) {
   DEBUGPRINTLN1("in doConfigMode");
 
 #ifdef USE_APPSTORY
-  // RDC now yet working as well as I would like...
-  delay(1000);                // let any web page get sent.
 
-  if (WiFi.status() != WL_CONNECTED) { // if not connected to an AP,
-    stopWifiService();          // stop all config services
-  } else {
-    webServer.reset();           // stop the web server
-  }
+  delay(500);                // let any web page get sent.
 
-  IAS.preSetAutoConfig(true); // Do config mode if Wifi Not found.  can manually call this. 
+  stopWifiService();          // stop all wifi services
+
+  IAS.preSetAutoConfig(true); // Do config mode if Wifi Not found.
 
   IAS.espRestart('C');        // enter Configuration mode
 
 #else
-  // RDC
-  // if a wifi is given, then begin the WiFi Mode
-  // 1) add STA to the WiFi Mode,  ( if already in AP, then AP_STA )
-  // 2) attempt to connect,  If successfull, then we are done.
-  // 3) decide to reboot or just move to 'sta' mode
-  if ( strlen(thamConfig.wifiSSID) > 0 ) {
+
+  if (( WiFi.getMode() & WIFI_AP ) &&
+      ( strlen(thamConfig.wifiSSID) > 0 )) { // check if we have AP mode. & SSID
       DEBUGPRINT1("Wi-Fi mode set to WIFI_AP_STA ...");
       r_stt = WiFi.mode(WIFI_AP_STA);                    // reset mode to AP/STA
       DEBUGPRINTF1("Mode Set:%s\n", r_stt ? "Success" : "Failed!");
@@ -799,8 +799,12 @@ void doConfigMode(bool loopFlag) {
       DEBUGPRINTLN1("Tying saved credentials, connecting... ");
       r_stt = WiFi.waitForConnectResult();
       DEBUGPRINTF1( "Connect Result: %d\n:",r_stt );
+  } else { 
+    handleWifiWaitFlag = false;
   }
-#endif
+  
+
+#endif // USE_APPSTORY
 }
 
 // ================================== Event and HTTP handle routines =====================================
@@ -947,8 +951,30 @@ void handleNotFound(AsyncWebServerRequest *request){
 }
 
 // ==========================================================================================
+bool checkInProgress(AsyncWebServerRequest *request) {
+  // the app has several modes it can be in, This check routine will handle any
+  // unexpected page requests
+  
+  DEBUGPRINTLN1("in checkInProgress");
+  
+#ifndef USE_APPSTORY
+  if (handleWifiWaitFlag) {  // send back to wifi wait.
+    handleWifiWait(request);
+    return(true) ; // don't do any other checks.
+  }
+#endif
 #ifdef USE_APPSTORY
-// Handle the firmware check request
+  if (fwUpdateStatus != FW_IDLE ) {
+    handleCheckUpdate(request);
+    return(true) ; // don't do any other checks.
+  }    
+#endif
+  return(false);
+}
+// ==========================================================================================
+#ifdef USE_APPSTORY
+// Handle the firmware check request,  this is recalled by most firmware check messages.
+
 void handleCheckUpdate(AsyncWebServerRequest *request) {
   String toSend = "";
 
@@ -997,13 +1023,23 @@ void handleWifiSetup(AsyncWebServerRequest *request) {
   String toSend = "";  
   
   DEBUGPRINTLN1("Page served handleWifiSetup");
-  
+  // if we get here and we in STA mode,  go back to root
+  if (WiFi.getMode() == WIFI_STA) {       // isConnected may be misleading...
+    handleRoot(request);
+    return;
+  }
+ 
   antennaArrayClear();                    // clear relay bits 
   doRelayCommand(false);                  // request loop to send commands
 
+#ifdef USE_APPSTORY
+  doConfigMode(false);                      // use IOTAppStory wifiManager request Config Mode.
+  sendHTTPMessage(request,"/","30", HTTP_CONFIG_MSG); // cause refresh in 10 second. to root
+#endif
+#ifndef USE_APPSTORY
   // we are using Async Web server, so we can not block,
   // scan networks allows this with a 'true' argument.
-
+ 
   int n = WiFi.scanComplete();
   DEBUGPRINTF1("scanComplete: %d\n",n);
   if (n < 0) {                        // Not complete or not started...
@@ -1013,11 +1049,7 @@ void handleWifiSetup(AsyncWebServerRequest *request) {
     // send a message page...
     sendHTTPMessage(request,"/wifisetup","1", HTTP_WIFISETUP_MSG);  // cause refresh in 1 second.
   } else {
-#ifdef USE_APPSTORY
-    doConfigMode(false);                      // request Config Mode after results.
-    sendHTTPMessage(request,"/","10", HTTP_CONFIG_MSG); // cause refresh in 10 second. to root
-#endif
-#ifndef USE_APPSTORY
+
     // now send the wifi Config form.
     toSend += FPSTR(HTTP_APP_HEAD);
     toSend.replace("{v}", "Config THAM device");
@@ -1056,8 +1088,8 @@ void handleWifiSetup(AsyncWebServerRequest *request) {
     toSend += FPSTR(HTTP_END); 
     sendHTTP(request, toSend);
     WiFi.scanDelete(); // clear the saved buffer...
-#endif
   }
+#endif
 }
 
 
@@ -1067,23 +1099,27 @@ void handleWifiSetup(AsyncWebServerRequest *request) {
 // Handle the WLAN wait and redirect to new WLAN home page again
 void handleWifiWait(AsyncWebServerRequest *request) {
   int r_stt = 0;
-  char* urlBuffer = "";
 
-  
+
   r_stt = WiFi.status();  // get current state of WiFi
   DEBUGPRINTF1("in handleWifiWait, status:%d\n",r_stt);
-  
-  if ( r_stt == WL_CONNECTED) {
-    //sprintf(urlBuffer,"http://%s/",WiFi.localIP().toString().c_str());
-    sendHTTPMessage(request,"/","20", HTTP_WIFIDONE_MSG); // cause refresh in 20 second. to root
-    doThamSTA(false);   // request transition to STA mode
-  } else {
-    if (r_stt == WL_CONNECT_FAILED ) {
-      sendHTTPMessage(request,"/wifisetup","10", HTTP_WIFIFAILED_MSG); // cause refresh in 10 second. to root
-      WiFi.scanNetworks(true);        // start ASYNC scan
-    } else {
-      sendHTTPMessage(request,"/wifiwait","5", HTTP_WIFISAVED_MSG); // cause refresh in 10 second. to root
-    }
+  switch (r_stt) {
+    // success
+    case WL_CONNECTED :      sendHTTPMessage(request,"/","600", HTTP_WIFIDONE_MSG); // done, tell user..
+                             doThamSTA(false);   // request transition to STA mode
+                             handleWifiWaitFlag = false;
+                             DEBUGPRINTLN1("... Connected");
+                             break;
+    // working on it.
+    case WL_IDLE_STATUS :    sendHTTPMessage(request,"/wifiwait","5", HTTP_WIFISAVED_MSG); // cause refresh in 5 second.
+                             handleWifiWaitFlag = true;
+                             DEBUGPRINTLN1("... Connecting");
+                             break;
+                             
+    default :              sendHTTPMessage(request,"/","10", HTTP_WIFIFAILED_MSG); // cause refresh in 10 second.
+                             WiFi.scanNetworks(true);        // start ASYNC scan 
+                             handleWifiWaitFlag = false;
+                             DEBUGPRINTLN1("... Failed");
   }
 }
 #endif // USE_APPSTORY
@@ -1096,17 +1132,25 @@ void handleWifiSave(AsyncWebServerRequest *request) {
 
   DEBUGPRINTLN1("Page served handleWifiSave");
 
-  request->arg("s").toCharArray(parmSSID, sizeof(parmSSID) - 1);
-  request->arg("p").toCharArray(parmPassword, sizeof(parmPassword) - 1);
-  if ( strlen(parmSSID) > 0 ) {
-    strcpy(thamConfig.wifiSSID,parmSSID);
-    strcpy(thamConfig.wifiPassword,parmPassword);
-    doThamConfigSave(false);
-    doConfigMode(false);                      // request Config Mode after results.
-    sendHTTPMessage(request,"/wifiwait","5", HTTP_WIFISAVED_MSG); // cause refresh in 10 second. to wifiwait
+  if (request->hasArg("s")) {  // have a valid parameter?
+    request->arg("s").toCharArray(parmSSID, sizeof(parmSSID) - 1);
+  
+    if (request->hasArg("p")) request->arg("p").toCharArray(parmPassword, sizeof(parmPassword) - 1);
+    DEBUGPRINTF1("Have SSID:'%s' PWD:'%s'\n",parmSSID,parmPassword);
+    if ( strlen(parmSSID) > 0 ) {
+      strcpy(thamConfig.wifiSSID,parmSSID);
+      strcpy(thamConfig.wifiPassword,parmPassword);
+      doThamConfigSave(false);
+      doConfigMode(false);                      // request Config Mode after results.
+      sendHTTPMessage(request,"/wifiwait","5", HTTP_WIFISAVED_MSG); // cause refresh to wifiwait
+      handleWifiWaitFlag = true;                 // starting the WiFi wait function
+    } else {
+      sendHTTPMessage(request,"/wifisetup","5", HTTP_WIFINOENTRY_MSG); // cause refresh to root
+      WiFi.scanNetworks(true);        // start ASYNC scan
+    }
   } else {
-    sendHTTPMessage(request,"/wifisetup","5", HTTP_WIFINOENTRY_MSG); // cause refresh in 10 second. to root
-    WiFi.scanNetworks(true);        // start ASYNC scan
+    // no valid parameter,  must have hand entered address....
+    checkInProgress(request);
   }
 }
 #endif  // USE_APPSTORY
@@ -1120,6 +1164,8 @@ void handleAntennaSave(AsyncWebServerRequest *request) {
   String toSend = "";
   
   DEBUGPRINTLN1("Page served handleAntennaSave");
+  if (checkInProgress(request)) return;
+  
   for ( i=0; i<NUM_ANTENNA_PORTS; i++ ) {
     sprintf(pageArgName,"a%d",i);
     if (request->hasArg(pageArgName))
@@ -1149,6 +1195,7 @@ void handleAntennaSetup(AsyncWebServerRequest *request) {
   String toSend = "";  
   
   DEBUGPRINTLN1("Page served handleAntennaSetup");
+  if (checkInProgress(request)) return;
 
   toSend += FPSTR(HTTP_APP_HEAD);
   toSend.replace("{v}", "Config Antenna Names");
@@ -1201,7 +1248,9 @@ void handleShowButtons(AsyncWebServerRequest *request) {
   int inpPort = 0;
   String itemStr = "";
   String toSend = "";
-      
+  
+  if (checkInProgress(request)) return;
+     
   if (request->hasParam("v") && request->hasParam("a")) {  // did we get a button press?
     inpRadio = request->getParam("v")->value().toInt();
     inpPort = request->getParam("a")->value().toInt();
@@ -1316,6 +1365,7 @@ void handleRoot(AsyncWebServerRequest *request) {
   String pageText = "";
  
   DEBUGPRINTLN1("Page served handleRoot");
+  if ( checkInProgress(request) ) return;
 
   toSend += FPSTR(HTTP_APP_HEAD);
   toSend.replace("{v}", "THAM Root");
@@ -1327,10 +1377,10 @@ void handleRoot(AsyncWebServerRequest *request) {
   
   toSend += FPSTR(HTTP_ROOTTEXT);   
                                                                                         
-  toSend.replace("{dn}",FPSTR(THAM_DEVICE_FUNCTION));
-
-  toSend += FPSTR(HTTP_ONPORTAL);
-  if (WiFi.isConnected()) {
+  // xxx toSend.replace("{dn}",FPSTR(THAM_DEVICE_FUNCTION));
+  // xxx toSend += FPSTR(HTTP_ONPORTAL);
+  
+  if (WiFi.getMode() == WIFI_STA) {
     toSend.replace("{n}", WiFi.SSID());
     toSend.replace("{ip}", WiFi.localIP().toString());
  
@@ -1339,8 +1389,25 @@ void handleRoot(AsyncWebServerRequest *request) {
     toSend.replace("{ip}", apIP.toString());
   }
   toSend += FPSTR(HTTP_THAMNET);
+  if (WiFi.getMode() == WIFI_STA) {
+    toSend += FPSTR(HTTP_ROOT_WIFI_TXT);
+  } else {
+    toSend += FPSTR(HTTP_ROOT_THAM_TXT);
+  }
   
   toSend += FPSTR(HTTP_ROOT_FORM);
+  // add in the buttons
+  if ((WiFi.isConnected()) ||
+      (WiFi.getMode() == WIFI_STA )){  // check situation
+    toSend += FPSTR(HTTP_ROOT_THAMBUTTON);
+  } else {
+     toSend += FPSTR(HTTP_ROOT_WIFIBUTTON);
+  }
+#ifdef USE_APPSTORY
+   if (WiFi.isConnected()) {  // if on internet, show update button.
+     toSend += FPSTR(HTTP_ROOT_FWBUTTON);
+  }
+#endif
   toSend += FPSTR(HTTP_FORM_END);
   toSend += FPSTR(HTTP_END);
 
@@ -1351,6 +1418,8 @@ void handleRoot(AsyncWebServerRequest *request) {
 void handleThamNetwork(AsyncWebServerRequest *request){
 
   DEBUGPRINTLN1("Page served handleThamNetwork");
+
+  if (checkInProgress(request)) return;
 
   doThamAP(false);                // setup THAM network in main loop
                       
@@ -1397,11 +1466,10 @@ void doThamSTA(bool loopFlag) {
   doThamSTARequest = false;
   DEBUGPRINTLN1("in doThamSTA");
     
-  showWifiMode();
-  delay(1000);                 // let any web pages get sent
-  showWifiMode();
+  delay(500);                  // let any web pages get sent
+
   WiFi.softAPdisconnect(true); // turn off wifi AP
-  showWifiMode();
+
 }
 // ================================== do THAM AP mode Change =====================================
 void doThamAP(bool loopFlag) {
