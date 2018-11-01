@@ -1595,6 +1595,13 @@ void setup() {
   readThamConfig();                                          // read configurations
   setupThamWiFi();                                           // set up the THAM Wifi
 #else
+  #ifdef  ESP8266
+    IAS.onFirstBoot([]() {
+      DEBUGPRINTLN1(F(" Manual reset necessary after serial upload!"));
+      DEBUGPRINTLN1(F("*-------------------------------------------------------------------------*"));
+      ESP.restart();
+    });
+  #endif  
   stopWifiService();                                         // clear everything from WiFi
   // -- set up IOTAppStory Library ----------------------------
   IAS.preSetDeviceName(strDeviceName);
